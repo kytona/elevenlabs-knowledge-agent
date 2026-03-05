@@ -1,0 +1,12 @@
+.next
+.pytest_cache
+__pycache__/
+*.pyc
+.env
+.venv/
+node_modules/
+dist/
+coverage/
+docs/
+AGENTS.md
+CLAUDE.md
