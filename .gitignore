@@ -10,3 +10,5 @@ coverage/
 docs/
 AGENTS.md
 CLAUDE.md
+.qdrant/
+docs/

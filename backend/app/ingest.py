@@ -61,6 +61,7 @@ def main() -> None:
         print(f"Ingested {inserted} chunks from {document_path}")
 
     print(f"Done. Upserted {total_points} chunks into '{settings.qdrant_collection_name}'.")
+    qdrant_client.close()
 
 
 if __name__ == "__main__":

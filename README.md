@@ -4,6 +4,8 @@ An open-source starter kit for connecting ElevenLabs Conversational AI to a cust
 
 ## Architecture
 
+ElevenLabs offers a built-in Knowledge Base, but it is a black box: you cannot control chunking, swap embedding models, or implement hybrid retrieval. This starter bypasses it entirely using the Custom LLM webhook, giving you full ownership of the retrieval pipeline.
+
 ```text
 User speaks into browser
         |
@@ -15,10 +17,10 @@ User speaks into browser
 VAD + STT
         |
         v
-[POST /v1/chat/completions]
+[POST /v1/chat/completions]       <-- Custom LLM webhook (bypasses built-in KB)
 FastAPI webhook
   -> extract latest user message
-  -> embed query
+  -> embed query (OpenAI text-embedding-3-small)
   -> retrieve top chunks from Qdrant
   -> inject context into system prompt
   -> stream LLM tokens back as SSE
@@ -56,30 +58,48 @@ backend/
 frontend/
   src/app/
 data/sample_docs/
-docker-compose.yml
+docs/
+  railway.md          <-- Railway deployment guide
+.qdrant/              <-- Local Qdrant vector DB (created on first ingest)
 .env.example
 README.md
 ```
 
-## Prerequisites
+## Prerequisites (local setup)
 
 - Python 3.11+
 - Node.js 20+
 - OpenAI API key
 - ElevenLabs API key and Agent ID
-- ngrok account for local webhook testing
+- [ngrok](https://ngrok.com) account (to expose your local backend to ElevenLabs)
 
-Docker is optional. If you do not want to run Qdrant in Docker, set `QDRANT_IN_MEMORY=true`.
+## Local setup
 
-## Setup
+Everything runs on your machine. Qdrant stores vectors locally in the `.qdrant` folder at the repo root—no Docker, no separate server.
 
 ### 1. Configure environment
 
-Copy `.env.example` to `.env` and fill in your keys.
-
-Frontend-only env values can also live in `frontend/.env.local`:
+Copy `.env.example` to `.env` and fill in your keys:
 
 ```bash
+cp .env.example .env
+```
+
+Edit `.env` and set:
+
+```text
+OPENAI_API_KEY=your_openai_api_key
+OPENAI_BASE_URL=https://api.openai.com/v1
+OPENAI_CHAT_MODEL=gpt-4o-mini
+OPENAI_EMBEDDING_MODEL=text-embedding-3-small
+QDRANT_IN_MEMORY=true
+QDRANT_LOCAL_PATH=.qdrant
+QDRANT_COLLECTION_NAME=knowledge_base
+```
+
+For the frontend, add to `.env` or `frontend/.env.local`:
+
+```text
 NEXT_PUBLIC_ELEVENLABS_AGENT_ID=your_agent_id
 ```
 
@@ -87,41 +107,26 @@ NEXT_PUBLIC_ELEVENLABS_AGENT_ID=your_agent_id
 
 ```bash
 cd backend
-python -m venv .venv
-source .venv/bin/activate
+python3 -m venv .venv
+source .venv/bin/activate   # On Windows: .venv\Scripts\activate
 pip install -r requirements.txt
 ```
 
-### 3. Start Qdrant
+### 3. Ingest the sample documents
 
-Docker path:
-
-```bash
-docker-compose up -d
-```
-
-No-Docker path:
-
-```bash
-export QDRANT_IN_MEMORY=true
-export QDRANT_LOCAL_PATH=../.qdrant
-```
-
-This no-Docker mode uses Qdrant's embedded local storage on disk, not a process-local in-memory store, so the ingest CLI and API server can share the same collection across separate commands.
-
-### 4. Ingest the sample document
-
-From the repo root:
+Qdrant stores data in `.qdrant` at the repo root. Ingest the sample docs:
 
 ```bash
 cd backend
+source .venv/bin/activate
 python -m app.ingest ../data/sample_docs --recreate-collection
 ```
 
-### 5. Run the backend
+### 4. Start the backend
 
 ```bash
 cd backend
+source .venv/bin/activate
 uvicorn app.main:app --reload --port 8000
 ```
 
@@ -131,27 +136,28 @@ Health check:
 curl http://localhost:8000/health
 ```
 
-### 6. Expose the webhook with ngrok
+### 5. Expose the webhook with ngrok
+
+ElevenLabs needs a public URL to call your webhook. Run ngrok in a separate terminal:
 
 ```bash
 ngrok http 8000
 ```
 
-Set the ElevenLabs Custom LLM URL to:
+Copy the HTTPS URL (e.g. `https://abc123.ngrok-free.app`).
 
-```text
-https://your-ngrok-subdomain.ngrok.app/v1/chat/completions
-```
+### 6. Configure your ElevenLabs agent
 
-### 7. Configure your ElevenLabs agent
-
-- Open the ElevenLabs agent dashboard.
-- Enable the Custom LLM option.
-- Point it at your ngrok URL.
+- Open the [ElevenLabs app](https://elevenlabs.io/app) → **Configure** → **Agents**.
+- Select your agent and open the **Agent** tab.
+- In the **LLM** section (bottom right), click the model row (e.g. "Gemini 2.5 Flash").
+- Choose **Custom LLM** and set the Server URL to: `https://your-ngrok-url.ngrok-free.app/v1` (include `/v1`; ElevenLabs appends `/chat/completions`)
+- Model ID can be `custom` or any label. API Key can stay "None" for a self-hosted endpoint.
 - Test with the text playground first.
-- After the text path works, open the local frontend and test voice.
 
-### 8. Run the frontend
+**If you see "Server URL must use a secure HTTPS connection":** Ensure the URL includes `/v1` (e.g. `https://xxx.ngrok-free.app/v1`). If it still fails, ngrok's free-tier interstitial may block ElevenLabs' validation—try adding the header `ngrok-skip-browser-warning: 1` under **Request headers**, or use a paid ngrok plan.
+
+### 7. Run the frontend
 
 ```bash
 cd frontend
@@ -159,11 +165,11 @@ npm install
 npm run dev
 ```
 
-Open `http://localhost:3000`.
+Open `http://localhost:3000` and test voice.
 
-## Testing the webhook with curl first
+## Testing the webhook with curl
 
-Before connecting ElevenLabs, verify the SSE format directly:
+Before connecting ElevenLabs, verify the SSE format:
 
 ```bash
 curl -N http://localhost:8000/v1/chat/completions \
@@ -182,15 +188,11 @@ You should see OpenAI-style `data:` SSE chunks followed by `data: [DONE]`.
 
 ## Swap your LLM provider
 
-The webhook contract is OpenAI-compatible by design. To use a different compatible provider such as Ollama, Together, or Groq, change `OPENAI_BASE_URL` and set matching chat and embedding model names.
+The webhook contract is OpenAI-compatible by design. To use a different compatible provider (Ollama, Together, Groq, etc.), change `OPENAI_BASE_URL` and set matching chat and embedding model names. No provider-specific adapter is required.
 
-No provider-specific adapter is required in this starter.
+## Deploy to Railway
 
-## Demo proof checklist
-
-- Screenshot of successful `curl` streaming test
-- Screenshot of the ElevenLabs text playground returning grounded answers
-- Screenshot or short recording of the browser voice client
+For a production deployment with backend, frontend, and Qdrant all on Railway, see **[docs/railway.md](docs/railway.md)**.
 
 ## Implementation notes
 
@@ -198,7 +200,7 @@ No provider-specific adapter is required in this starter.
 - The backend loads the repo-root `.env` automatically even when you run commands from `backend/`.
 - If Qdrant returns no matches, the webhook still forwards the request to the base model.
 - The frontend is intentionally minimal. The webhook is the core value of the project.
-- ngrok is for local development only. Deploying the backend publicly removes that requirement.
+- Qdrant runs in embedded mode with data stored in `.qdrant` at the repo root. No Docker or separate Qdrant server needed.
 
 ## About the Author
 

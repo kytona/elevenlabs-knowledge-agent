@@ -133,17 +133,17 @@ export default function Home() {
           <h3>How it works</h3>
           <p>
             ElevenLabs performs VAD and speech-to-text, then posts an OpenAI-style chat completion request to your
-            backend. The backend embeds the latest user utterance, retrieves the top matching chunks from Qdrant, and
-            injects them into the system prompt before forwarding the request to the configured LLM.
+            Railway-hosted backend. The backend embeds the latest user utterance, retrieves the top matching chunks
+            from Qdrant, and injects them into the system prompt before forwarding the request to the configured LLM.
           </p>
         </section>
 
         <section className="card panel notes">
           <h3>Troubleshooting</h3>
           <ul>
-            <li>Confirm the Custom LLM URL in ElevenLabs points to your ngrok-backed `/v1/chat/completions` endpoint.</li>
+            <li>Confirm the Custom LLM Server URL in ElevenLabs is your backend base URL ending in <code>/v1</code> (e.g. <code>https://your-backend.up.railway.app/v1</code>).</li>
             <li>Run the ingestion command before starting the voice client so Qdrant contains the sample chunks.</li>
-            <li>Set `NEXT_PUBLIC_ELEVENLABS_AGENT_ID` in `frontend/.env.local` or the repo root `.env` file.</li>
+            <li>Set `NEXT_PUBLIC_ELEVENLABS_AGENT_ID` in the Railway frontend service or `frontend/.env.local` for local preview.</li>
           </ul>
         </section>
       </div>
