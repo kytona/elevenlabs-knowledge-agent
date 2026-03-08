@@ -1,7 +1,7 @@
 "use client";
 
 import { useConversation } from "@elevenlabs/react";
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 
 type ActivityLog = {
   label: string;
@@ -10,9 +10,29 @@ type ActivityLog = {
 
 const agentId = process.env.NEXT_PUBLIC_ELEVENLABS_AGENT_ID;
 
+function getStatusDisplay(status: string): { label: string; dotClass: string } {
+  switch (status) {
+    case "connected":
+      return { label: "Connected", dotClass: "status-dot status-dot--connected" };
+    case "connecting":
+      return { label: "Connecting...", dotClass: "status-dot status-dot--connecting" };
+    default:
+      return { label: "Ready", dotClass: "status-dot" };
+  }
+}
+
+function classifyLog(entry: ActivityLog): "message-agent" | "message-user" | "event" | "error" {
+  const lower = entry.label.toLowerCase();
+  if (lower === "error") return "error";
+  if (lower === "connected" || lower === "disconnected") return "event";
+  if (lower === "user") return "message-user";
+  return "message-agent";
+}
+
 export default function Home() {
   const [logs, setLogs] = useState<ActivityLog[]>([]);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const transcriptRef = useRef<HTMLDivElement>(null);
 
   const conversation = useConversation({
     onConnect: () => appendLog("Connected", "Microphone session started."),
@@ -31,8 +51,14 @@ export default function Home() {
   });
 
   function appendLog(label: string, detail: string) {
-    setLogs((current) => [{ label, detail }, ...current].slice(0, 8));
+    setLogs((current) => [...current, { label, detail }].slice(-8));
   }
+
+  useEffect(() => {
+    if (transcriptRef.current) {
+      transcriptRef.current.scrollTop = transcriptRef.current.scrollHeight;
+    }
+  }, [logs]);
 
   async function startConversation() {
     if (!agentId) {
@@ -61,92 +87,148 @@ export default function Home() {
   }
 
   const statusText = conversation.status ?? "disconnected";
+  const statusDisplay = getStatusDisplay(statusText);
 
   return (
-    <main className="page-shell">
-      <div className="page-grid">
-        <section className="card hero">
-          <span className="eyebrow">Custom LLM Starter</span>
-          <h1>Voice agents with your own retrieval pipeline.</h1>
-          <p className="hero-copy">
-            This starter bypasses the ElevenLabs Knowledge Base and routes each turn through your FastAPI webhook,
-            where you can run retrieval, prompt augmentation, and model routing before streaming the answer back for
-            text-to-speech.
-          </p>
-          <div className="stack">
-            <span>Next.js + @elevenlabs/react</span>
-            <span>FastAPI webhook</span>
-            <span>Qdrant retrieval</span>
-            <span>OpenAI-compatible streaming</span>
-          </div>
-        </section>
+    <>
+      <header className="topbar">
+        <div className="topbar-inner">
+          <span className="topbar-brand">ElevenLabs Knowledge Agent</span>
+          <a
+            className="topbar-github"
+            href="https://github.com/elevenlabs/elevenlabs-examples"
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            GitHub &rarr;
+          </a>
+        </div>
+      </header>
 
-        <section className="card panel">
-          <h2>Conversation Controls</h2>
-          <p>Use your configured ElevenLabs agent to test the custom LLM path against the sample knowledge base.</p>
-          <div className="status">
-            <strong>Status</strong>
-            <span>{statusText}</span>
-          </div>
-          {errorMessage ? (
-            <div className="status">
-              <strong>Issue</strong>
-              <span>{errorMessage}</span>
+      <main className="hero">
+        <div className="hero-grid">
+          <div className="hero-left">
+            <span className="eyebrow">Custom LLM Starter</span>
+            <h1>Voice agents with your own retrieval pipeline.</h1>
+            <p className="subtitle">
+              Route each turn through your FastAPI webhook for retrieval,
+              prompt augmentation, and model routing before streaming TTS.
+            </p>
+            <div className="stack">
+              <span>elevenlabs/react</span>
+              <span>FastAPI + Qdrant</span>
+              <span>OpenAI streaming</span>
             </div>
-          ) : null}
-          <div className="actions">
-            <button
-              type="button"
-              className="primary"
-              disabled={statusText === "connected" || statusText === "connecting"}
-              onClick={startConversation}
-            >
-              Start conversation
-            </button>
-            <button
-              type="button"
-              className="secondary"
-              disabled={statusText !== "connected"}
-              onClick={endConversation}
-            >
-              Stop conversation
-            </button>
           </div>
-          <div className="logs" aria-live="polite">
-            {logs.length === 0 ? (
-              <div className="log">
-                <strong>Ready</strong>
-                Waiting for the first voice session.
+
+          <div className="console">
+            <div className="console-header">
+              <div className="console-status">
+                <span className={statusDisplay.dotClass}></span>
+                <span>{statusDisplay.label}</span>
               </div>
-            ) : (
-              logs.map((entry, index) => (
-                <div className="log" key={`${entry.label}-${index}`}>
-                  <strong>{entry.label}</strong>
-                  {entry.detail}
-                </div>
-              ))
+              <div className="console-actions">
+                <button
+                  type="button"
+                  className="btn-start"
+                  disabled={statusText === "connected" || statusText === "connecting"}
+                  onClick={startConversation}
+                >
+                  Start
+                </button>
+                <button
+                  type="button"
+                  className="btn-stop"
+                  disabled={statusText !== "connected"}
+                  onClick={endConversation}
+                >
+                  Stop
+                </button>
+              </div>
+            </div>
+
+            {errorMessage && (
+              <div className="error-banner">{errorMessage}</div>
             )}
+
+            <div className="console-transcript" ref={transcriptRef} aria-live="polite">
+              {logs.length === 0 ? (
+                <div className="transcript-placeholder">
+                  Start a conversation to test the custom RAG pipeline.
+                </div>
+              ) : (
+                logs.map((entry, index) => {
+                  const type = classifyLog(entry);
+                  switch (type) {
+                    case "message-agent":
+                      return (
+                        <div className="msg--agent" key={`${entry.label}-${index}`}>
+                          {entry.detail}
+                        </div>
+                      );
+                    case "message-user":
+                      return (
+                        <div className="msg--user" key={`${entry.label}-${index}`}>
+                          {entry.detail}
+                        </div>
+                      );
+                    case "event":
+                      return (
+                        <div className="msg--event" key={`${entry.label}-${index}`}>
+                          &mdash; {entry.label}: {entry.detail}
+                        </div>
+                      );
+                    case "error":
+                      return (
+                        <div className="msg--error" key={`${entry.label}-${index}`}>
+                          {entry.detail}
+                        </div>
+                      );
+                  }
+                })
+              )}
+            </div>
           </div>
-        </section>
+        </div>
+      </main>
 
-        <section className="card panel notes">
-          <h3>How it works</h3>
-          <p>
-            ElevenLabs performs VAD and speech-to-text, then posts an OpenAI-style chat completion request to your
-            Railway-hosted backend. The backend embeds the latest user utterance, retrieves the top matching chunks
-            from Qdrant, and injects them into the system prompt before forwarding the request to the configured LLM.
-          </p>
-        </section>
+      <section className="section">
+        <h2 className="section-label">Architecture</h2>
+        <div className="pipeline">
+          <span className="pipeline-step">Speech Input</span>
+          <span className="pipeline-arrow">&rarr;</span>
+          <span className="pipeline-step">FastAPI Webhook</span>
+          <span className="pipeline-arrow">&rarr;</span>
+          <span className="pipeline-step">Qdrant Retrieval</span>
+          <span className="pipeline-arrow">&rarr;</span>
+          <span className="pipeline-step">LLM</span>
+          <span className="pipeline-arrow">&rarr;</span>
+          <span className="pipeline-step">TTS Output</span>
+        </div>
+        <p className="section-body">
+          ElevenLabs handles VAD and speech-to-text, then posts an OpenAI-style
+          chat completion request to your Railway-hosted backend. The backend
+          embeds the latest user utterance, retrieves the top matching chunks
+          from Qdrant, and injects them into the system prompt before forwarding
+          the request to the configured LLM.
+        </p>
+      </section>
 
-        <section className="card panel notes">
-          <h3>Troubleshooting</h3>
-          <ul>
-            <li>Confirm the Custom LLM Server URL in ElevenLabs is your backend base URL ending in <code>/v1</code> (e.g. <code>https://your-backend.up.railway.app/v1</code>).</li>
-            <li>Run the ingestion command before starting the voice client so Qdrant contains the sample chunks.</li>
-            <li>Set `NEXT_PUBLIC_ELEVENLABS_AGENT_ID` in the Railway frontend service or `frontend/.env.local` for local preview.</li>
-          </ul>
-        </section>
-      </div>
-    </main>
+      <section className="section section--secondary">
+        <h2 className="section-label">Troubleshooting</h2>
+        <ul className="troubleshoot-list">
+          <li>Set the Custom LLM Server URL in ElevenLabs to your backend URL (e.g. <code>https://your-backend.up.railway.app</code>).</li>
+          <li>Run the ingestion command before starting the voice client so Qdrant contains the sample chunks.</li>
+          <li>Set <code>NEXT_PUBLIC_ELEVENLABS_AGENT_ID</code> in the Railway frontend service or locally for preview.</li>
+        </ul>
+      </section>
+
+      <footer className="footer">
+        <p>Built with ElevenLabs &middot; FastAPI &middot; Qdrant</p>
+        <p className="disclaimer">
+          This project is not affiliated with, endorsed by, or associated with ElevenLabs in any way. It is an independent demo.
+        </p>
+      </footer>
+    </>
   );
 }
