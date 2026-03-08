@@ -154,7 +154,7 @@ export default function Home() {
             <div className="console-transcript" ref={transcriptRef} aria-live="polite">
               {logs.length === 0 ? (
                 <div className="transcript-placeholder">
-                  Start a conversation to test the custom RAG pipeline.
+                  Ask about The Adventure of the Speckled Band — try &quot;Who hired Holmes?&quot; or &quot;What was the speckled band?&quot;
                 </div>
               ) : (
                 logs.map((entry, index) => {
@@ -218,7 +218,7 @@ export default function Home() {
         <h2 className="section-label">Troubleshooting</h2>
         <ul className="troubleshoot-list">
           <li>Set the Custom LLM Server URL in ElevenLabs to your backend URL (e.g. <code>https://your-backend.up.railway.app</code>).</li>
-          <li>Run the ingestion command before starting the voice client so Qdrant contains the sample chunks.</li>
+          <li>Run the ingestion command before starting the voice client so Qdrant contains the Speckled Band sample story.</li>
           <li>Set <code>NEXT_PUBLIC_ELEVENLABS_AGENT_ID</code> in the Railway frontend service or locally for preview.</li>
         </ul>
       </section>

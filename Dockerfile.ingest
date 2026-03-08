@@ -12,4 +12,4 @@ COPY data/ ./data/
 WORKDIR /app/backend
 ENV PYTHONPATH=/app/backend
 
-CMD ["python", "-m", "app.ingest", "../data/sample_docs", "--recreate-collection"]
+CMD ["python", "-m", "app.ingest", "../data/sample_docs/the-adventure-of-the-speckled-band.md", "--recreate-collection"]

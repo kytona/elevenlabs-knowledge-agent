@@ -160,21 +160,21 @@ def test_debug_retrieval(monkeypatch) -> None:
         "retrieve_context",
         lambda **_kwargs: [
             {
-                "source": "../data/sample_docs/elevenlabs-custom-llm-guide.md",
+                "source": "../data/sample_docs/the-adventure-of-the-speckled-band.md",
                 "chunk_index": 0,
-                "text": "Custom architecture reasons include control over retrieval logic.",
+                "text": "Helen Stoner came to Baker Street in great agitation to consult Sherlock Holmes about her stepfather, Dr. Grimesby Roylott.",
                 "score": 0.91,
             }
         ],
     )
 
     client = TestClient(main_module.app)
-    response = client.get("/debug/retrieval", params={"q": "Why use a custom architecture?"})
+    response = client.get("/debug/retrieval", params={"q": "Who hired Sherlock Holmes?"})
 
     main_module.app.dependency_overrides.clear()
     assert response.status_code == 200
     assert response.json()["collection"] == "knowledge_base"
-    assert response.json()["matches"][0]["source"].endswith("elevenlabs-custom-llm-guide.md")
+    assert response.json()["matches"][0]["source"].endswith("the-adventure-of-the-speckled-band.md")
 
 
 def test_chat_completion_falls_back_when_qdrant_collection_is_missing(monkeypatch) -> None:

@@ -66,6 +66,7 @@ README.md
 ## Local deployment
 
 Everything runs on your machine. Qdrant stores vectors locally in the `.qdrant` folder at the repo root.
+The default demo dataset is [`data/sample_docs/the-adventure-of-the-speckled-band.md`](data/sample_docs/the-adventure-of-the-speckled-band.md), the Sherlock Holmes story from *The Adventures of Sherlock Holmes*.
 
 ### Prerequisites
 
@@ -109,14 +110,14 @@ source .venv/bin/activate   # On Windows: .venv\Scripts\activate
 pip install -r requirements.txt
 ```
 
-### 3. Ingest the sample documents
+### 3. Ingest the default sample document
 
-Qdrant stores data in `.qdrant` at the repo root. Ingest the sample docs:
+Qdrant stores data in `.qdrant` at the repo root. Ingest the Speckled Band sample story:
 
 ```bash
 cd backend
 source .venv/bin/activate
-python -m app.ingest ../data/sample_docs --recreate-collection
+python -m app.ingest ../data/sample_docs/the-adventure-of-the-speckled-band.md --recreate-collection
 ```
 
 ### 4. Start the backend
@@ -164,7 +165,7 @@ curl -N http://localhost:8000/v1/chat/completions \
     "stream": true,
     "messages": [
       {"role": "system", "content": "You are a helpful assistant."},
-      {"role": "user", "content": "When should I use a custom LLM instead of the built-in knowledge base?"}
+      {"role": "user", "content": "Who hired Sherlock Holmes and what was their problem?"}
     ]
   }'
 ```
@@ -174,10 +175,18 @@ You should see OpenAI-style `data:` SSE chunks followed by `data: [DONE]`.
 To verify retrieval specifically, hit the backend debug route:
 
 ```bash
-curl "http://localhost:8000/debug/retrieval?q=What%20are%20the%20three%20common%20reasons%20to%20choose%20a%20custom%20architecture%3F"
+curl "http://localhost:8000/debug/retrieval?q=What%20was%20the%20speckled%20band%3F"
 ```
 
-If retrieval is working, the response will include matching chunks from `data/sample_docs/elevenlabs-custom-llm-guide.md`.
+If retrieval is working, the response will include matching chunks from `data/sample_docs/the-adventure-of-the-speckled-band.md`.
+
+Suggested demo questions:
+
+- Who hired Sherlock Holmes and what was their problem?
+- What was the speckled band?
+- Who is Dr. Roylott and what did he do?
+- How did Holmes solve the mystery?
+- What happened to Julia Stoner?
 
 ---
 
@@ -278,7 +287,7 @@ NEXT_PUBLIC_ELEVENLABS_AGENT_ID=your_agent_id
 cd backend
 source .venv/bin/activate
 QDRANT_URL=https://your-qdrant-public-domain.up.railway.app \
-python -m app.ingest ../data/sample_docs --recreate-collection
+python -m app.ingest ../data/sample_docs/the-adventure-of-the-speckled-band.md --recreate-collection
 ```
 
 **Option B: Ingest from a one-off Railway service** (Qdrant has no public domain)
@@ -296,7 +305,7 @@ Push to your connected repo or trigger a deploy. Verify:
 curl https://your-backend.up.railway.app/health
 ```
 
-Expected response includes `"status": "ok"`, `"qdrant_in_memory": false`, and `"qdrant_points_count": 4`.
+Expected response includes `"status": "ok"`, `"qdrant_in_memory": false`, and a non-zero `"qdrant_points_count"` after ingestion.
 
 ### Step 6: Configure ElevenLabs
 
@@ -315,7 +324,7 @@ curl -N https://your-backend.up.railway.app/v1/chat/completions \
     "stream": true,
     "messages": [
       {"role": "system", "content": "You are a helpful assistant."},
-      {"role": "user", "content": "When should I use a custom LLM instead of the built-in knowledge base?"}
+      {"role": "user", "content": "Who hired Sherlock Holmes and what was their problem?"}
     ]
   }'
 ```
@@ -323,7 +332,7 @@ curl -N https://your-backend.up.railway.app/v1/chat/completions \
 To test retrieval directly:
 
 ```bash
-curl "https://your-backend.up.railway.app/debug/retrieval?q=What%20are%20the%20three%20common%20reasons%20to%20choose%20a%20custom%20architecture%3F"
+curl "https://your-backend.up.railway.app/debug/retrieval?q=What%20was%20the%20speckled%20band%3F"
 ```
 
 ### Troubleshooting "Application failed to respond"

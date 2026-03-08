@@ -25,8 +25,17 @@ def load_text_files(path: Path) -> list[tuple[str, str]]:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Ingest markdown or text documents into Qdrant.")
-    parser.add_argument("path", help="Path to a markdown/text file or a directory of files.")
+    parser = argparse.ArgumentParser(
+        description="Ingest markdown or text documents into Qdrant.",
+        epilog=(
+            "Example: python -m app.ingest ../data/sample_docs/the-adventure-of-the-speckled-band.md "
+            "--recreate-collection"
+        ),
+    )
+    parser.add_argument(
+        "path",
+        help="Path to a markdown/text file or a directory of files. The default demo doc is ../data/sample_docs/the-adventure-of-the-speckled-band.md.",
+    )
     parser.add_argument("--chunk-size", type=int, default=800)
     parser.add_argument("--chunk-overlap", type=int, default=120)
     parser.add_argument("--recreate-collection", action="store_true")
@@ -66,4 +75,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-
