@@ -50,13 +50,19 @@ class FakeUnexpectedResponse(UnexpectedResponse):
         return self.content.decode("utf-8")
 
 
-def test_health_endpoint() -> None:
+def test_health_endpoint(monkeypatch) -> None:
     main_module.app.dependency_overrides[main_module.get_settings] = lambda: Settings(OPENAI_API_KEY="")
+    monkeypatch.setattr(main_module, "get_qdrant_collection_stats", lambda _settings: {
+        "qdrant_collection_exists": False,
+        "qdrant_points_count": 0,
+    })
     client = TestClient(main_module.app)
     response = client.get("/health")
     main_module.app.dependency_overrides.clear()
     assert response.status_code == 200
     assert response.json()["status"] == "ok"
+    assert response.json()["qdrant_collection_exists"] is False
+    assert response.json()["qdrant_points_count"] == 0
 
 
 def test_chat_completion_stream(monkeypatch) -> None:
@@ -92,6 +98,38 @@ def test_chat_completion_stream(monkeypatch) -> None:
     assert "[DONE]" in response.text
 
 
+def test_chat_completion_stream_compat_route(monkeypatch) -> None:
+    test_settings = Settings(
+        OPENAI_API_KEY="test-key",
+        QDRANT_IN_MEMORY=True,
+    )
+
+    main_module.app.dependency_overrides[main_module.get_settings] = lambda: test_settings
+    monkeypatch.setattr(main_module, "get_openai_client", lambda: object())
+    monkeypatch.setattr(main_module, "get_async_openai_client", lambda: FakeAsyncOpenAI())
+    monkeypatch.setattr(main_module, "get_qdrant_client", lambda: object())
+    monkeypatch.setattr(
+        main_module,
+        "retrieve_context",
+        lambda **_kwargs: [],
+    )
+
+    client = TestClient(main_module.app)
+    response = client.post(
+        "/chat/completions",
+        json={
+            "model": "custom",
+            "stream": True,
+            "messages": [{"role": "user", "content": "Hello"}],
+        },
+    )
+
+    main_module.app.dependency_overrides.clear()
+    assert response.status_code == 200
+    assert "text/event-stream" in response.headers["content-type"]
+    assert "[DONE]" in response.text
+
+
 def test_chat_completion_requires_stream() -> None:
     main_module.app.dependency_overrides[main_module.get_settings] = lambda: Settings(OPENAI_API_KEY="")
     client = TestClient(main_module.app)
@@ -105,6 +143,38 @@ def test_chat_completion_requires_stream() -> None:
     )
     main_module.app.dependency_overrides.clear()
     assert response.status_code == 400
+
+
+def test_debug_retrieval(monkeypatch) -> None:
+    test_settings = Settings(
+        OPENAI_API_KEY="test-key",
+        QDRANT_IN_MEMORY=True,
+        QDRANT_COLLECTION_NAME="knowledge_base",
+    )
+
+    main_module.app.dependency_overrides[main_module.get_settings] = lambda: test_settings
+    monkeypatch.setattr(main_module, "get_openai_client", lambda: object())
+    monkeypatch.setattr(main_module, "get_qdrant_client", lambda: object())
+    monkeypatch.setattr(
+        main_module,
+        "retrieve_context",
+        lambda **_kwargs: [
+            {
+                "source": "../data/sample_docs/elevenlabs-custom-llm-guide.md",
+                "chunk_index": 0,
+                "text": "Custom architecture reasons include control over retrieval logic.",
+                "score": 0.91,
+            }
+        ],
+    )
+
+    client = TestClient(main_module.app)
+    response = client.get("/debug/retrieval", params={"q": "Why use a custom architecture?"})
+
+    main_module.app.dependency_overrides.clear()
+    assert response.status_code == 200
+    assert response.json()["collection"] == "knowledge_base"
+    assert response.json()["matches"][0]["source"].endswith("elevenlabs-custom-llm-guide.md")
 
 
 def test_chat_completion_falls_back_when_qdrant_collection_is_missing(monkeypatch) -> None:

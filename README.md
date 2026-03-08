@@ -71,11 +71,10 @@ README.md
 - Node.js 20+
 - OpenAI API key
 - ElevenLabs API key and Agent ID
-- [ngrok](https://ngrok.com) account (to expose your local backend to ElevenLabs)
 
 ## Local setup
 
-Everything runs on your machine. Qdrant stores vectors locally in the `.qdrant` folder at the repo root—no Docker, no separate server.
+Everything runs on your machine. Qdrant stores vectors locally in the `.qdrant` folder at the repo root. For a public webhook that ElevenLabs can reach, use the Railway deployment in [docs/railway.md](docs/railway.md).
 
 ### 1. Configure environment
 
@@ -136,28 +135,16 @@ Health check:
 curl http://localhost:8000/health
 ```
 
-### 5. Expose the webhook with ngrok
-
-ElevenLabs needs a public URL to call your webhook. Run ngrok in a separate terminal:
-
-```bash
-ngrok http 8000
-```
-
-Copy the HTTPS URL (e.g. `https://abc123.ngrok-free.app`).
-
-### 6. Configure your ElevenLabs agent
+### 5. Configure your ElevenLabs agent
 
 - Open the [ElevenLabs app](https://elevenlabs.io/app) → **Configure** → **Agents**.
 - Select your agent and open the **Agent** tab.
 - In the **LLM** section (bottom right), click the model row (e.g. "Gemini 2.5 Flash").
-- Choose **Custom LLM** and set the Server URL to: `https://your-ngrok-url.ngrok-free.app/v1` (include `/v1`; ElevenLabs appends `/chat/completions`)
+- For a deployed setup, choose **Custom LLM** and set the Server URL to your Railway backend URL. This project accepts both `https://your-backend.up.railway.app/v1` and `https://your-backend.up.railway.app`.
 - Model ID can be `custom` or any label. API Key can stay "None" for a self-hosted endpoint.
 - Test with the text playground first.
 
-**If you see "Server URL must use a secure HTTPS connection":** Ensure the URL includes `/v1` (e.g. `https://xxx.ngrok-free.app/v1`). If it still fails, ngrok's free-tier interstitial may block ElevenLabs' validation—try adding the header `ngrok-skip-browser-warning: 1` under **Request headers**, or use a paid ngrok plan.
-
-### 7. Run the frontend
+### 6. Run the frontend
 
 ```bash
 cd frontend
@@ -185,6 +172,14 @@ curl -N http://localhost:8000/v1/chat/completions \
 ```
 
 You should see OpenAI-style `data:` SSE chunks followed by `data: [DONE]`.
+
+To verify retrieval specifically, hit the backend debug route:
+
+```bash
+curl "http://localhost:8000/debug/retrieval?q=What%20are%20the%20three%20common%20reasons%20to%20choose%20a%20custom%20architecture%3F"
+```
+
+If retrieval is working, the response will include matching chunks from `data/sample_docs/elevenlabs-custom-llm-guide.md`.
 
 ## Swap your LLM provider
 
