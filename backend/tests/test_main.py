@@ -50,7 +50,12 @@ class FakeUnexpectedResponse(UnexpectedResponse):
         return self.content.decode("utf-8")
 
 
+def reset_token_rate_limiter() -> None:
+    main_module.token_rate_limiter = main_module.RateLimiter()
+
+
 def test_health_endpoint(monkeypatch) -> None:
+    reset_token_rate_limiter()
     main_module.app.dependency_overrides[main_module.get_settings] = lambda: Settings(OPENAI_API_KEY="")
     monkeypatch.setattr(main_module, "get_qdrant_collection_stats", lambda _settings: {
         "qdrant_collection_exists": False,
@@ -66,6 +71,7 @@ def test_health_endpoint(monkeypatch) -> None:
 
 
 def test_chat_completion_stream(monkeypatch) -> None:
+    reset_token_rate_limiter()
     test_settings = Settings(
         OPENAI_API_KEY="test-key",
         QDRANT_IN_MEMORY=True,
@@ -99,6 +105,7 @@ def test_chat_completion_stream(monkeypatch) -> None:
 
 
 def test_chat_completion_stream_compat_route(monkeypatch) -> None:
+    reset_token_rate_limiter()
     test_settings = Settings(
         OPENAI_API_KEY="test-key",
         QDRANT_IN_MEMORY=True,
@@ -131,6 +138,7 @@ def test_chat_completion_stream_compat_route(monkeypatch) -> None:
 
 
 def test_chat_completion_requires_stream() -> None:
+    reset_token_rate_limiter()
     main_module.app.dependency_overrides[main_module.get_settings] = lambda: Settings(OPENAI_API_KEY="")
     client = TestClient(main_module.app)
     response = client.post(
@@ -150,8 +158,10 @@ def test_debug_retrieval(monkeypatch) -> None:
         OPENAI_API_KEY="test-key",
         QDRANT_IN_MEMORY=True,
         QDRANT_COLLECTION_NAME="knowledge_base",
+        ENABLE_DEBUG_RETRIEVAL=True,
     )
 
+    reset_token_rate_limiter()
     main_module.app.dependency_overrides[main_module.get_settings] = lambda: test_settings
     monkeypatch.setattr(main_module, "get_openai_client", lambda: object())
     monkeypatch.setattr(main_module, "get_qdrant_client", lambda: object())
@@ -177,7 +187,130 @@ def test_debug_retrieval(monkeypatch) -> None:
     assert response.json()["matches"][0]["source"].endswith("the-adventure-of-the-speckled-band.md")
 
 
+def test_debug_retrieval_returns_404_when_disabled() -> None:
+    reset_token_rate_limiter()
+    main_module.app.dependency_overrides[main_module.get_settings] = lambda: Settings(OPENAI_API_KEY="")
+    client = TestClient(main_module.app)
+    response = client.get("/debug/retrieval", params={"q": "Who hired Sherlock Holmes?"})
+    main_module.app.dependency_overrides.clear()
+    assert response.status_code == 404
+
+
+def test_conversation_token_endpoint_returns_token_only(monkeypatch) -> None:
+    reset_token_rate_limiter()
+    test_settings = Settings(
+        OPENAI_API_KEY="test-key",
+        ELEVENLABS_API_KEY="elevenlabs-key",
+        ELEVENLABS_AGENT_ID="agent_123",
+        ALLOWED_ORIGINS="http://localhost:3000",
+    )
+    main_module.app.dependency_overrides[main_module.get_settings] = lambda: test_settings
+    monkeypatch.setattr(main_module, "get_settings", lambda: test_settings)
+
+    async def fake_fetch_conversation_token(_settings):
+        return "conv-token-123"
+
+    monkeypatch.setattr(main_module, "fetch_conversation_token", fake_fetch_conversation_token)
+
+    client = TestClient(main_module.app)
+    response = client.post(
+        "/v1/elevenlabs/conversation-token",
+        headers={"Origin": "http://localhost:3000"},
+    )
+
+    main_module.app.dependency_overrides.clear()
+    assert response.status_code == 200
+    assert response.json() == {"token": "conv-token-123"}
+    assert "agent_id" not in response.text
+    assert "elevenlabs-key" not in response.text
+
+
+def test_conversation_token_endpoint_uses_x_forwarded_for_for_rate_limiting(monkeypatch) -> None:
+    reset_token_rate_limiter()
+    test_settings = Settings(
+        OPENAI_API_KEY="test-key",
+        ELEVENLABS_API_KEY="elevenlabs-key",
+        ELEVENLABS_AGENT_ID="agent_123",
+        ALLOWED_ORIGINS="http://localhost:3000",
+        CONVERSATION_TOKEN_RATE_LIMIT=1,
+        CONVERSATION_TOKEN_RATE_LIMIT_WINDOW_SECONDS=60,
+    )
+    main_module.app.dependency_overrides[main_module.get_settings] = lambda: test_settings
+    monkeypatch.setattr(main_module, "get_settings", lambda: test_settings)
+
+    async def fake_fetch_conversation_token(_settings):
+        return "conv-token-123"
+
+    monkeypatch.setattr(main_module, "fetch_conversation_token", fake_fetch_conversation_token)
+
+    client = TestClient(main_module.app)
+    headers = {
+        "Origin": "http://localhost:3000",
+        "X-Forwarded-For": "198.51.100.10, 10.0.0.1",
+    }
+    first = client.post("/v1/elevenlabs/conversation-token", headers=headers)
+    second = client.post("/v1/elevenlabs/conversation-token", headers=headers)
+
+    main_module.app.dependency_overrides.clear()
+    assert first.status_code == 200
+    assert second.status_code == 429
+
+
+def test_conversation_token_endpoint_rejects_unlisted_origin(monkeypatch) -> None:
+    reset_token_rate_limiter()
+    test_settings = Settings(
+        OPENAI_API_KEY="test-key",
+        ELEVENLABS_API_KEY="elevenlabs-key",
+        ELEVENLABS_AGENT_ID="agent_123",
+        ALLOWED_ORIGINS="http://localhost:3000",
+    )
+    main_module.app.dependency_overrides[main_module.get_settings] = lambda: test_settings
+    monkeypatch.setattr(main_module, "get_settings", lambda: test_settings)
+
+    async def fake_fetch_conversation_token(_settings):
+        return "conv-token-123"
+
+    monkeypatch.setattr(main_module, "fetch_conversation_token", fake_fetch_conversation_token)
+
+    client = TestClient(main_module.app)
+    response = client.post(
+        "/v1/elevenlabs/conversation-token",
+        headers={"Origin": "https://evil.example"},
+    )
+
+    main_module.app.dependency_overrides.clear()
+    assert response.status_code == 403
+
+
+def test_conversation_token_endpoint_sets_cors_for_allowed_origin(monkeypatch) -> None:
+    reset_token_rate_limiter()
+    test_settings = Settings(
+        OPENAI_API_KEY="test-key",
+        ELEVENLABS_API_KEY="elevenlabs-key",
+        ELEVENLABS_AGENT_ID="agent_123",
+        ALLOWED_ORIGINS="http://localhost:3000",
+    )
+    main_module.app.dependency_overrides[main_module.get_settings] = lambda: test_settings
+    monkeypatch.setattr(main_module, "get_settings", lambda: test_settings)
+
+    async def fake_fetch_conversation_token(_settings):
+        return "conv-token-123"
+
+    monkeypatch.setattr(main_module, "fetch_conversation_token", fake_fetch_conversation_token)
+
+    client = TestClient(main_module.app)
+    response = client.post(
+        "/v1/elevenlabs/conversation-token",
+        headers={"Origin": "http://localhost:3000"},
+    )
+
+    main_module.app.dependency_overrides.clear()
+    assert response.status_code == 200
+    assert response.headers["access-control-allow-origin"] == "http://localhost:3000"
+
+
 def test_chat_completion_falls_back_when_qdrant_collection_is_missing(monkeypatch) -> None:
+    reset_token_rate_limiter()
     test_settings = Settings(
         OPENAI_API_KEY="test-key",
         QDRANT_IN_MEMORY=True,
@@ -216,6 +349,7 @@ def test_chat_completion_falls_back_when_qdrant_collection_is_missing(monkeypatc
 
 
 def test_chat_completion_returns_500_for_non_collection_404(monkeypatch) -> None:
+    reset_token_rate_limiter()
     test_settings = Settings(
         OPENAI_API_KEY="test-key",
         QDRANT_IN_MEMORY=True,

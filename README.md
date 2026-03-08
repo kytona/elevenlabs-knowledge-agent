@@ -93,12 +93,16 @@ OPENAI_EMBEDDING_MODEL=text-embedding-3-small
 QDRANT_IN_MEMORY=true
 QDRANT_LOCAL_PATH=.qdrant
 QDRANT_COLLECTION_NAME=knowledge_base
+ELEVENLABS_API_KEY=your_elevenlabs_api_key
+ELEVENLABS_AGENT_ID=your_elevenlabs_agent_id
+ALLOWED_ORIGINS=http://localhost:3000,http://127.0.0.1:3000
+ENABLE_DEBUG_RETRIEVAL=true
 ```
 
 For the frontend, add to `.env` or `frontend/.env.local`:
 
 ```text
-NEXT_PUBLIC_ELEVENLABS_AGENT_ID=your_agent_id
+NEXT_PUBLIC_BACKEND_URL=http://localhost:8000
 ```
 
 ### 2. Backend setup
@@ -151,7 +155,7 @@ npm install
 npm run dev
 ```
 
-Open `http://localhost:3000` and test voice.
+Open `http://localhost:3000` and test voice. The browser now requests a short-lived ElevenLabs conversation token from your backend, so the agent ID is never exposed to the client.
 
 ### 7. Test the webhook with curl
 
@@ -172,7 +176,7 @@ curl -N http://localhost:8000/v1/chat/completions \
 
 You should see OpenAI-style `data:` SSE chunks followed by `data: [DONE]`.
 
-To verify retrieval specifically, hit the backend debug route:
+To verify retrieval specifically during local development, hit the backend debug route:
 
 ```bash
 curl "http://localhost:8000/debug/retrieval?q=What%20was%20the%20speckled%20band%3F"
@@ -267,6 +271,14 @@ OPENAI_EMBEDDING_MODEL=text-embedding-3-small
 QDRANT_URL=http://qdrant.railway.internal:6333
 QDRANT_COLLECTION_NAME=knowledge_base
 QDRANT_IN_MEMORY=false
+BACKEND_PUBLIC_URL=https://your-backend.up.railway.app
+ELEVENLABS_API_KEY=your_elevenlabs_api_key
+ELEVENLABS_AGENT_ID=your_elevenlabs_agent_id
+ALLOWED_ORIGINS=https://your-frontend.up.railway.app
+ENABLE_DEBUG_RETRIEVAL=false
+CONVERSATION_TOKEN_TIMEOUT_SECONDS=5
+CONVERSATION_TOKEN_RATE_LIMIT=10
+CONVERSATION_TOKEN_RATE_LIMIT_WINDOW_SECONDS=60
 ```
 
 Use `http://qdrant.railway.internal:6333` so the backend reaches Qdrant over Railway's private network. Replace `qdrant` with your Qdrant service name if different.
@@ -276,7 +288,7 @@ Use `http://qdrant.railway.internal:6333` so the backend reaches Qdrant over Rai
 Set these on the `frontend` service:
 
 ```text
-NEXT_PUBLIC_ELEVENLABS_AGENT_ID=your_agent_id
+NEXT_PUBLIC_BACKEND_URL=https://your-backend.up.railway.app
 ```
 
 ### Step 4: Ingest documents into Railway Qdrant
@@ -312,7 +324,7 @@ Expected response includes `"status": "ok"`, `"qdrant_in_memory": false`, and a 
 1. Open the [ElevenLabs agent dashboard](https://elevenlabs.io/app/conversational-ai).
 2. Enable **Custom LLM** and set the Server URL to `https://your-backend.up.railway.app/v1` or `https://your-backend.up.railway.app`.
 3. Test with the text playground first.
-4. Open the Railway frontend and test voice.
+4. Open the Railway frontend and test voice. The frontend uses `NEXT_PUBLIC_BACKEND_URL` to request a backend-minted conversation token before connecting to ElevenLabs.
 
 ### Step 7: Test the webhook
 
@@ -329,7 +341,7 @@ curl -N https://your-backend.up.railway.app/v1/chat/completions \
   }'
 ```
 
-To test retrieval directly:
+To test retrieval directly in a non-production environment where diagnostics are enabled:
 
 ```bash
 curl "https://your-backend.up.railway.app/debug/retrieval?q=What%20was%20the%20speckled%20band%3F"
@@ -339,7 +351,8 @@ curl "https://your-backend.up.railway.app/debug/retrieval?q=What%20was%20the%20s
 
 - **Port binding** – Procfile must use `web: uvicorn app.main:app --host 0.0.0.0 --port $PORT`
 - **Qdrant connection** – Confirm `QDRANT_URL=http://qdrant.railway.internal:6333` and the Qdrant service name matches.
-- **Missing env vars** – Ensure `OPENAI_API_KEY` is set.
+- **Missing env vars** – Ensure `OPENAI_API_KEY`, `ELEVENLABS_API_KEY`, and `ELEVENLABS_AGENT_ID` are set on the backend.
+- **Origin allowlist** – `ALLOWED_ORIGINS` must include your deployed frontend origin or the conversation-token endpoint will reject the request.
 - **Root directory** – Backend service must have Root Directory = `backend`.
 
 ---
@@ -354,6 +367,8 @@ The webhook contract is OpenAI-compatible by design. To use a different compatib
 - The backend loads the repo-root `.env` automatically even when you run commands from `backend/`.
 - If Qdrant returns no matches, the webhook still forwards the request to the base model.
 - The frontend is intentionally minimal. The webhook is the core value of the project.
+- The frontend only needs `NEXT_PUBLIC_BACKEND_URL`; keep ElevenLabs credentials server-side.
+- `/debug/retrieval` is intended for local or explicitly enabled environments, not for a default public production deployment.
 - Qdrant runs in embedded mode with data stored in `.qdrant` at the repo root. No Docker or separate Qdrant server needed.
 
 ## About the Author

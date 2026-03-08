@@ -49,3 +49,14 @@ def test_get_qdrant_client_uses_persistent_local_path(monkeypatch, tmp_path) -> 
 
     assert captured == {"path": str(tmp_path / "qdrant-data")}
 
+
+def test_allowed_origin_list_splits_comma_separated_values() -> None:
+    settings = config_module.Settings(
+        OPENAI_API_KEY="test-key",
+        ALLOWED_ORIGINS="http://localhost:3000, https://frontend.up.railway.app ,http://127.0.0.1:3000",
+    )
+    assert settings.allowed_origin_list == [
+        "http://localhost:3000",
+        "https://frontend.up.railway.app",
+        "http://127.0.0.1:3000",
+    ]
