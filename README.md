@@ -58,23 +58,21 @@ backend/
 frontend/
   src/app/
 data/sample_docs/
-docs/
-  railway.md          <-- Railway deployment guide
 .qdrant/              <-- Local Qdrant vector DB (created on first ingest)
 .env.example
 README.md
 ```
 
-## Prerequisites (local setup)
+## Local deployment
+
+Everything runs on your machine. Qdrant stores vectors locally in the `.qdrant` folder at the repo root.
+
+### Prerequisites
 
 - Python 3.11+
 - Node.js 20+
 - OpenAI API key
 - ElevenLabs API key and Agent ID
-
-## Local setup
-
-Everything runs on your machine. Qdrant stores vectors locally in the `.qdrant` folder at the repo root. For a public webhook that ElevenLabs can reach, use the Railway deployment in [docs/railway.md](docs/railway.md).
 
 ### 1. Configure environment
 
@@ -154,7 +152,7 @@ npm run dev
 
 Open `http://localhost:3000` and test voice.
 
-## Testing the webhook with curl
+### 7. Test the webhook with curl
 
 Before connecting ElevenLabs, verify the SSE format:
 
@@ -181,13 +179,165 @@ curl "http://localhost:8000/debug/retrieval?q=What%20are%20the%20three%20common%
 
 If retrieval is working, the response will include matching chunks from `data/sample_docs/elevenlabs-custom-llm-guide.md`.
 
+---
+
+## Railway deployment
+
+For a production deployment with backend, frontend, and Qdrant all on Railway, use the steps below.
+
+### Prerequisites
+
+- Railway account
+- OpenAI API key
+- ElevenLabs API key and Agent ID
+
+### Architecture on Railway
+
+```text
+User speaks into browser
+        |
+        v
+[Next.js + @elevenlabs/react on Railway]
+        |
+        v
+[ElevenLabs Conversational AI]
+        |
+        v
+[POST /v1/chat/completions]
+FastAPI webhook on Railway
+  -> Qdrant (Railway service, private network)
+  -> stream LLM tokens back as SSE
+        |
+        v
+[ElevenLabs TTS]
+        |
+        v
+User hears grounded response
+```
+
+### Step 1: Create Railway services
+
+Create one Railway project with three services from the same repo. Each service uses a different **Root Directory** so Railway builds and deploys the correct subfolder.
+
+**Backend service**
+
+1. Add a new service and connect the GitHub repo.
+2. Under **Source** → **Add Root Directory**, set `backend`.
+3. Generate a public domain for the backend (required for ElevenLabs webhook).
+
+**Frontend service**
+
+1. Add another service in the same project.
+2. Connect the same repo.
+3. Under **Source** → **Add Root Directory**, set `frontend`.
+4. Generate a public domain for the frontend.
+
+**Qdrant service**
+
+1. Add a third service.
+2. Choose **Deploy from Docker image** (not GitHub).
+3. Use image `qdrant/qdrant:latest`.
+4. Attach a persistent volume: mount path `/qdrant/storage`.
+5. Enable a public domain only if you want to ingest from your local machine; otherwise use private networking.
+
+| Service   | Root Directory | Notes                                                                 |
+|-----------|----------------|-----------------------------------------------------------------------|
+| `backend` | `backend`      | Uses `Procfile`: binds to `$PORT` (Railway sets 8080 by default)      |
+| `frontend`| `frontend`     | Uses `Procfile` for Next.js                                          |
+| `qdrant`  | (Docker image) | `qdrant/qdrant:latest`, volume at `/qdrant/storage`                   |
+
+### Step 2: Backend environment variables
+
+Set these on the `backend` service:
+
+```text
+OPENAI_API_KEY=...
+OPENAI_BASE_URL=https://api.openai.com/v1
+OPENAI_CHAT_MODEL=gpt-4o-mini
+OPENAI_EMBEDDING_MODEL=text-embedding-3-small
+QDRANT_URL=http://qdrant.railway.internal:6333
+QDRANT_COLLECTION_NAME=knowledge_base
+QDRANT_IN_MEMORY=false
+```
+
+Use `http://qdrant.railway.internal:6333` so the backend reaches Qdrant over Railway's private network. Replace `qdrant` with your Qdrant service name if different.
+
+### Step 3: Frontend environment variables
+
+Set these on the `frontend` service:
+
+```text
+NEXT_PUBLIC_ELEVENLABS_AGENT_ID=your_agent_id
+```
+
+### Step 4: Ingest documents into Railway Qdrant
+
+**Option A: Ingest from local machine** (Qdrant has public domain)
+
+```bash
+cd backend
+source .venv/bin/activate
+QDRANT_URL=https://your-qdrant-public-domain.up.railway.app \
+python -m app.ingest ../data/sample_docs --recreate-collection
+```
+
+**Option B: Ingest from a one-off Railway service** (Qdrant has no public domain)
+
+1. Add a new service, connect the same repo, leave **Root Directory** empty.
+2. Set `RAILWAY_DOCKERFILE_PATH=Dockerfile.ingest`.
+3. Add the same variables as the backend (including `QDRANT_URL=http://qdrant.railway.internal:6333`).
+4. Deploy. The service runs the ingest, then exits. Delete the service after successful ingest.
+
+### Step 5: Deploy and health check
+
+Push to your connected repo or trigger a deploy. Verify:
+
+```bash
+curl https://your-backend.up.railway.app/health
+```
+
+Expected response includes `"status": "ok"`, `"qdrant_in_memory": false`, and `"qdrant_points_count": 4`.
+
+### Step 6: Configure ElevenLabs
+
+1. Open the [ElevenLabs agent dashboard](https://elevenlabs.io/app/conversational-ai).
+2. Enable **Custom LLM** and set the Server URL to `https://your-backend.up.railway.app/v1` or `https://your-backend.up.railway.app`.
+3. Test with the text playground first.
+4. Open the Railway frontend and test voice.
+
+### Step 7: Test the webhook
+
+```bash
+curl -N https://your-backend.up.railway.app/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "custom",
+    "stream": true,
+    "messages": [
+      {"role": "system", "content": "You are a helpful assistant."},
+      {"role": "user", "content": "When should I use a custom LLM instead of the built-in knowledge base?"}
+    ]
+  }'
+```
+
+To test retrieval directly:
+
+```bash
+curl "https://your-backend.up.railway.app/debug/retrieval?q=What%20are%20the%20three%20common%20reasons%20to%20choose%20a%20custom%20architecture%3F"
+```
+
+### Troubleshooting "Application failed to respond"
+
+- **Port binding** – Procfile must use `web: uvicorn app.main:app --host 0.0.0.0 --port $PORT`
+- **Qdrant connection** – Confirm `QDRANT_URL=http://qdrant.railway.internal:6333` and the Qdrant service name matches.
+- **Missing env vars** – Ensure `OPENAI_API_KEY` is set.
+- **Root directory** – Backend service must have Root Directory = `backend`.
+
+---
+
 ## Swap your LLM provider
 
 The webhook contract is OpenAI-compatible by design. To use a different compatible provider (Ollama, Together, Groq, etc.), change `OPENAI_BASE_URL` and set matching chat and embedding model names. No provider-specific adapter is required.
-
-## Deploy to Railway
-
-For a production deployment with backend, frontend, and Qdrant all on Railway, see **[docs/railway.md](docs/railway.md)**.
 
 ## Implementation notes
 
