@@ -1,0 +1,15 @@
+# One-off ingest job for Railway. Run once, then delete the service.
+FROM python:3.11-slim
+
+WORKDIR /app
+
+COPY backend/requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+COPY backend/ ./backend/
+COPY data/ ./data/
+
+WORKDIR /app/backend
+ENV PYTHONPATH=/app/backend
+
+CMD ["python", "-m", "app.ingest", "../data/sample_docs", "--recreate-collection"]
