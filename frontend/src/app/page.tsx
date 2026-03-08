@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { useConversation } from "@elevenlabs/react";
 import { useState, useEffect, useRef } from "react";
 
@@ -33,6 +34,7 @@ export default function Home() {
   const [logs, setLogs] = useState<ActivityLog[]>([]);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const transcriptRef = useRef<HTMLDivElement>(null);
+  const currentYear = new Date().getFullYear();
 
   const conversation = useConversation({
     onConnect: () => appendLog("Connected", "Microphone session started."),
@@ -217,25 +219,40 @@ export default function Home() {
       </main>
 
       <section className="section">
-        <h2 className="section-label">Architecture</h2>
-        <div className="pipeline">
-          <span className="pipeline-step">Speech Input</span>
-          <span className="pipeline-arrow">&rarr;</span>
-          <span className="pipeline-step">FastAPI Webhook</span>
-          <span className="pipeline-arrow">&rarr;</span>
-          <span className="pipeline-step">Qdrant Retrieval</span>
-          <span className="pipeline-arrow">&rarr;</span>
-          <span className="pipeline-step">LLM</span>
-          <span className="pipeline-arrow">&rarr;</span>
-          <span className="pipeline-step">TTS Output</span>
+        <div className="architecture-grid">
+          <div className="architecture-visual">
+            <Image
+              src="/railway_canvas.png"
+              alt="Railway deployment canvas showing frontend, backend, ingest service, and Qdrant connections."
+              width={688}
+              height={647}
+              className="architecture-image"
+              priority
+            />
+          </div>
+
+          <div className="architecture-copy">
+            <h2 className="section-label">Architecture</h2>
+            <div className="pipeline">
+              <span className="pipeline-step">Speech Input</span>
+              <span className="pipeline-arrow">&rarr;</span>
+              <span className="pipeline-step">FastAPI Webhook</span>
+              <span className="pipeline-arrow">&rarr;</span>
+              <span className="pipeline-step">Qdrant Retrieval</span>
+              <span className="pipeline-arrow">&rarr;</span>
+              <span className="pipeline-step">LLM</span>
+              <span className="pipeline-arrow">&rarr;</span>
+              <span className="pipeline-step">TTS Output</span>
+            </div>
+            <p className="section-body">
+              ElevenLabs handles VAD and speech-to-text, then posts an OpenAI-style
+              chat completion request to your Railway-hosted backend. The backend
+              embeds the latest user utterance, retrieves the top matching chunks
+              from Qdrant, and injects them into the system prompt before forwarding
+              the request to the configured LLM.
+            </p>
+          </div>
         </div>
-        <p className="section-body">
-          ElevenLabs handles VAD and speech-to-text, then posts an OpenAI-style
-          chat completion request to your Railway-hosted backend. The backend
-          embeds the latest user utterance, retrieves the top matching chunks
-          from Qdrant, and injects them into the system prompt before forwarding
-          the request to the configured LLM.
-        </p>
       </section>
 
       <section className="section section--secondary">
@@ -248,7 +265,12 @@ export default function Home() {
       </section>
 
       <footer className="footer">
-        <p>Built with ElevenLabs &middot; FastAPI &middot; Qdrant</p>
+        <p>
+          Built with ElevenLabs &middot; FastAPI &middot; Qdrant &middot; &copy; {currentYear}{" "}
+          <a href="https://kytona.com" target="_blank" rel="noopener noreferrer">
+            Kytona Limited
+          </a>
+        </p>
         <p className="disclaimer">
           This project is not affiliated with, endorsed by, or associated with ElevenLabs in any way. It is an independent demo.
         </p>

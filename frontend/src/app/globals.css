@@ -332,6 +332,33 @@ button {
   border-top: 1px solid var(--border-strong);
 }
 
+.architecture-grid {
+  display: grid;
+  grid-template-columns: 1.05fr 0.95fr;
+  gap: 40px;
+  align-items: center;
+}
+
+.architecture-visual {
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: #0f1020;
+  box-shadow: 0 24px 64px rgba(17, 24, 39, 0.16);
+  overflow: hidden;
+  max-width: 440px;
+  justify-self: start;
+}
+
+.architecture-image {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.architecture-copy {
+  min-width: 0;
+}
+
 .section-label {
   font-size: 0.813rem;
   font-weight: 700;
@@ -438,6 +465,11 @@ button {
   .hero-grid {
     grid-template-columns: 1fr;
     gap: 36px;
+  }
+
+  .architecture-grid {
+    grid-template-columns: 1fr;
+    gap: 24px;
   }
 
   .section {
