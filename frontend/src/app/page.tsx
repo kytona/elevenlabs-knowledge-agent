@@ -70,7 +70,7 @@ export default function Home() {
 
     setErrorMessage(null);
     try {
-      await conversation.startSession({ agentId: elevenLabsAgentId, connectionType: "webrtc" });
+      await conversation.startSession({ agentId: elevenLabsAgentId, connectionType: "websocket" });
     } catch (error) {
       const detail = error instanceof Error ? error.message : "Could not start the voice session.";
       setErrorMessage(detail);
