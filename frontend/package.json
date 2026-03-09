@@ -9,7 +9,7 @@
     "lint": "next lint"
   },
   "dependencies": {
-    "@elevenlabs/react": "^0.6.1",
+    "@elevenlabs/react": "^0.14.1",
     "next": "^15.2.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0"
