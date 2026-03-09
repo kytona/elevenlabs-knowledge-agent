@@ -9,7 +9,7 @@ type ActivityLog = {
   detail: string;
 };
 
-const backendBaseUrl = process.env.NEXT_PUBLIC_BACKEND_URL?.replace(/\/$/, "");
+const elevenLabsAgentId = process.env.NEXT_PUBLIC_ELEVENLABS_AGENT_ID?.trim();
 
 function getStatusDisplay(status: string): { label: string; dotClass: string } {
   switch (status) {
@@ -63,38 +63,14 @@ export default function Home() {
   }, [logs]);
 
   async function startConversation() {
-    if (!backendBaseUrl) {
-      setErrorMessage("Missing NEXT_PUBLIC_BACKEND_URL in the frontend environment.");
+    if (!elevenLabsAgentId) {
+      setErrorMessage("Missing NEXT_PUBLIC_ELEVENLABS_AGENT_ID in the frontend environment.");
       return;
     }
 
     setErrorMessage(null);
     try {
-      const response = await fetch(`${backendBaseUrl}/v1/elevenlabs/conversation-token`, {
-        method: "POST",
-      });
-
-      if (!response.ok) {
-        let detail = "Could not start the voice session.";
-        try {
-          const payload = await response.json();
-          if (payload && typeof payload.detail === "string") {
-            detail = payload.detail;
-          }
-        } catch {
-          // Ignore non-JSON token errors and use the fallback message.
-        }
-        throw new Error(detail);
-      }
-
-      const payload = await response.json();
-      const conversationToken =
-        payload && typeof payload.token === "string" && payload.token.trim() ? payload.token : null;
-      if (!conversationToken) {
-        throw new Error("Backend did not return an ElevenLabs conversation token.");
-      }
-
-      await conversation.startSession({ conversationToken, connectionType: "webrtc" });
+      await conversation.startSession({ agentId: elevenLabsAgentId, connectionType: "webrtc" });
     } catch (error) {
       const detail = error instanceof Error ? error.message : "Could not start the voice session.";
       setErrorMessage(detail);
@@ -260,7 +236,7 @@ export default function Home() {
         <ul className="troubleshoot-list">
           <li>Set the Custom LLM Server URL in ElevenLabs to your backend URL (e.g. <code>https://your-backend.up.railway.app</code>).</li>
           <li>Run the ingestion command before starting the voice client so Qdrant contains the Speckled Band sample story.</li>
-          <li>Set <code>NEXT_PUBLIC_BACKEND_URL</code> in the Railway frontend service or locally for preview.</li>
+          <li>Set <code>NEXT_PUBLIC_ELEVENLABS_AGENT_ID</code> in the Railway frontend service or locally for preview.</li>
         </ul>
       </section>
 

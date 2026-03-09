@@ -23,19 +23,7 @@ class Settings(BaseSettings):
     qdrant_in_memory: bool = Field(default=False, alias="QDRANT_IN_MEMORY")
     qdrant_local_path: str = Field(default=str(REPO_ROOT / ".qdrant"), alias="QDRANT_LOCAL_PATH")
     backend_public_url: str = Field(default="http://localhost:8000", alias="BACKEND_PUBLIC_URL")
-    elevenlabs_api_key: str = Field(default="", alias="ELEVENLABS_API_KEY")
-    elevenlabs_agent_id: str = Field(default="", alias="ELEVENLABS_AGENT_ID")
-    allowed_origins: str = Field(
-        default="http://localhost:3000,http://127.0.0.1:3000",
-        alias="ALLOWED_ORIGINS",
-    )
     enable_debug_retrieval: bool = Field(default=False, alias="ENABLE_DEBUG_RETRIEVAL")
-    conversation_token_timeout_seconds: float = Field(default=5.0, alias="CONVERSATION_TOKEN_TIMEOUT_SECONDS")
-    conversation_token_rate_limit: int = Field(default=10, alias="CONVERSATION_TOKEN_RATE_LIMIT")
-    conversation_token_rate_limit_window_seconds: int = Field(
-        default=60,
-        alias="CONVERSATION_TOKEN_RATE_LIMIT_WINDOW_SECONDS",
-    )
 
     model_config = SettingsConfigDict(
         env_file=(str(REPO_ROOT / ".env"), str(BACKEND_ROOT / ".env")),
@@ -43,10 +31,6 @@ class Settings(BaseSettings):
         populate_by_name=True,
         extra="ignore",
     )
-
-    @property
-    def allowed_origin_list(self) -> list[str]:
-        return [origin.strip() for origin in self.allowed_origins.split(",") if origin.strip()]
 
 
 @lru_cache
