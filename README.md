@@ -1,5 +1,7 @@
 # ElevenLabs Knowledge Agent
 
+**[Watch demo](https://www.youtube.com/watch?v=cNokztPRrbM)** · **[Try it live](https://frontend-production-375c.up.railway.app/)**
+
 An open-source starter kit for connecting ElevenLabs Conversational AI to a custom retrieval pipeline. Instead of relying on the built-in Knowledge Base, this project intercepts the Custom LLM webhook, runs your own RAG step, and streams the grounded answer back in the OpenAI chat completion format that ElevenLabs expects.
 
 ## Architecture
